@@ -1,0 +1,40 @@
+---
+- name: Add users to hosts
+  hosts: localhost
+  sudo: True
+
+# Use the python command to generate an encripted password.
+# $ python -c 'import crypt; print crypt.crypt("This is my Password", "$1$SomeSalt$")'
+
+  vars:
+    # Try to resolve the hostname of this node.
+    masternode: "{{ lookup('file', '/etc/hostname') }}"
+
+    users:
+#     example.user:
+#        name: Example User
+#        passwd: $1$SomeSalt$aIJ0bvHJBSYd307VQuuD90 // test
+#        groups: "atigeo,admin"
+      
+  tasks:
+   - name: "Create admin group"
+     group: name=admin state=present
+
+   - name: "Create atigeo group"
+     group: name=atigeo state=present
+
+   - name: Add admin group as sudo users
+     lineinfile: "dest=/etc/sudoers state=present line='%admin ALL=(ALL:ALL) ALL'"
+
+   - name: Creat user with key
+     user: name={{ item.key }} generate_ssh_key=yes ssh_key_bits=2048 ssh_key_file=.ssh/id_rsa
+     with_dict: "{{ users }}"
+     when: ansible_hostname == "{{ masternode }}"
+
+   - name: "Creat node users"
+     user: name={{ item.key }} shell=/bin/bash password={{ item.value.passwd }} append=yes groups={{ item.value.groups }} ssh_key_file="{{ lookup('file', '/home/{{ item.key }}/.ssh/id_rsa.pub') }}"
+     with_dict: "{{ users }}"
+
+   - name: Install users key.
+     authorized_key: user={{ item.key }} key="{{ lookup('file', '/home/{{ item.key }}/.ssh/id_rsa.pub') }}"
+     with_dict: "{{ users }}"
